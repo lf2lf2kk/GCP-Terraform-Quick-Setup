@@ -1,83 +1,162 @@
-# Terraform Configuration for Cloud Run Deployment
+# GCP Terraform Quick Setup
 
-This repository contains Terraform scripts to deploy a Google Cloud Run service.
-I want to share these files with others if someone wants to deploy a service or application using GCP Cloud Run service.
+Production-minded Terraform starter for deploying a containerized application to Google Cloud Run.
 
-## Table of Contents
+This project is intentionally small, but it is organized like a real infrastructure repository: reusable modules live under `modules/`, environment-specific configuration lives under `environments/`, and operational notes live under `docs/`. You can use it as a clean starting point for Cloud Run services that need Secret Manager-backed environment variables and optional public access.
 
+## Table Of Contents
+
+- [What This Deploys](#what-this-deploys)
+- [Repository Layout](#repository-layout)
 - [Prerequisites](#prerequisites)
-- [FAQ](#faq)
 - [Quick Start](#quick-start)
-- [Directory Structure](#directory-structure)
 - [Configuration](#configuration)
-- [Usage](#usage)
-- [Cleaning Up](#cleaning-up)
+- [Adding Another Environment](#adding-another-environment)
+- [Operations](#operations)
+- [Security Notes](#security-notes)
+- [Next Steps For Production](#next-steps-for-production)
+
+## What This Deploys
+
+- A Google Cloud Run v2 service.
+- Runtime environment variables referenced from Google Secret Manager without storing secret values in Terraform state.
+- An optional public invoker IAM binding.
+- Environment-specific provider configuration.
+- Typed inputs and outputs so the configuration can be reused safely.
+
+## Repository Layout
+
+```text
+.
+|-- docs/
+|   `-- operations.md
+|-- environments/
+|   `-- dev/
+|       |-- main.tf
+|       |-- outputs.tf
+|       |-- terraform.tfvars.example
+|       |-- variables.tf
+|       `-- versions.tf
+|-- modules/
+|   `-- cloud-run-service/
+|       |-- main.tf
+|       |-- outputs.tf
+|       `-- variables.tf
+|-- .gitignore
+`-- README.md
+```
 
 ## Prerequisites
 
-- A Google Cloud Platform account.
-- A domain name registered and verified with Google. (If want this cloud run to have custom domain)
-- [Terraform](https://www.terraform.io/downloads.html) installed.
-- [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed.
-- Properly configured GCP credentials on your machine.
+Before you run Terraform, make sure you have:
 
-## FAQ
+- A Google Cloud project with billing enabled.
+- Terraform `>= 1.5`.
+- Google Cloud CLI installed and authenticated.
+- Permission to manage Cloud Run, IAM, and Secret Manager resources.
+- A container image published to Artifact Registry or Container Registry.
+- Secret Manager secrets created if you plan to inject secrets as environment variables.
 
-*Q: Why I start to use GCP as my project host?*  
-A: One of the reasons is because I want to be able to automatically deploy the service to a different domain. Another reason is because I want to show I have ability to manage applications with different cloud services.
+Authenticate locally with:
+
+```sh
+gcloud auth application-default login
+gcloud config set project YOUR_PROJECT_ID
+```
 
 ## Quick Start
 
-1. Clone this repository: `git clone https://github.com/FuShengK/GCP-Terraform-Quick-Setup.git`
-2. Navigate to the project directory
-3. Initialize Terraform: `terraform init`
-4. Apply the Terraform configuration: `terraform apply`
+1. Copy the example variables file:
 
-## Directory Structure
+   ```sh
+   cd environments/dev
+   cp terraform.tfvars.example terraform.tfvars
+   ```
 
-```
-.
-├── data.tf
-├── main.tf (Since I have separate files, I decided not to include main.tf)
-├── outputs.tf
-├── provider.tf
-├── resources.tf
-└── ......
-```
+2. Edit `terraform.tfvars` with your project, region, service name, image, and secret names.
 
-- `data.tf`: Contains data blocks used to fetch data from GCP.
-- `main.tf`: The main Terraform configuration file (may be empty or not exist if resources are split into separate files).
-- `outputs.tf`: Defines outputs that are printed after Terraform apply.
-- `provider.tf`: Configures the GCP provider.
-- `resources.tf`: Contains the resource definitions for Cloud Run and other GCP services.
+3. Initialize Terraform:
 
-## Configuration
-
-1. **Service Account**: Ensure that your GCP credentials JSON file is placed in a secure and accessible location on your machine.
-2. **Terraform Data**: Customise the data variables in `data.tf` as per your requirements.
-
-## Usage
-
-To deploy your Cloud Run service and configure a custom domain:
-
-1. Initialize Terraform:
    ```sh
    terraform init
    ```
-2. Preview the changes Terraform will make:
+
+4. Review the plan:
+
    ```sh
    terraform plan
    ```
-3. Apply the changes:
+
+5. Apply the deployment:
+
    ```sh
    terraform apply
    ```
 
-## Cleaning Up
+After the apply finishes, Terraform prints the Cloud Run service URL.
 
-To destroy the Terraform-managed infrastructure:
+## Configuration
+
+The main configuration lives in `environments/dev/terraform.tfvars`.
+
+```hcl
+project_id   = "my-gcp-project"
+region       = "asia-east1"
+service_name = "my-service"
+image        = "asia-east1-docker.pkg.dev/my-gcp-project/apps/my-service:latest"
+
+secret_names = [
+  "DATABASE_URL",
+  "API_KEY"
+]
+
+env_vars = {
+  NODE_ENV = "production"
+}
+
+allow_public_access = true
+```
+
+Secrets are referenced from Secret Manager and exposed to the container as environment variables with the same names. For example, a secret named `DATABASE_URL` becomes an environment variable named `DATABASE_URL`. The secret values are not copied into Terraform state.
+
+## Adding Another Environment
+
+To add `staging` or `prod`, copy `environments/dev`:
 
 ```sh
+cp -r environments/dev environments/prod
+```
+
+Then update the new environment's `terraform.tfvars`. In a mature setup, each environment should use its own remote backend, service account, and review process.
+
+## Operations
+
+Common commands:
+
+```sh
+terraform fmt -recursive
+terraform validate
+terraform plan
+terraform apply
 terraform destroy
 ```
 
+Use `terraform destroy` carefully. It removes the infrastructure managed by the active environment.
+
+See `docs/operations.md` for practical deployment and maintenance notes.
+
+## Security Notes
+
+- Do not commit `terraform.tfvars`, service account keys, state files, or generated plan files.
+- Prefer workload identity or application-default credentials over long-lived JSON keys.
+- Keep `allow_public_access = false` for private services.
+- Store sensitive runtime values in Secret Manager, not in Terraform files.
+- Use remote state with locking before collaborating with a team.
+
+## Next Steps For Production
+
+- Configure a remote Terraform backend such as Google Cloud Storage with state locking controls.
+- Add CI checks for `terraform fmt`, `terraform validate`, and policy scanning.
+- Split environments into separate projects or folders if your organization requires strict isolation.
+- Add custom domain mapping and HTTPS routing if the service is public.
+- Add monitoring, alerts, and deployment promotion workflows.

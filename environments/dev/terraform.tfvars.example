@@ -1,0 +1,28 @@
+project_id   = "my-gcp-project"
+region       = "asia-east1"
+service_name = "my-service"
+image        = "asia-east1-docker.pkg.dev/my-gcp-project/apps/my-service:latest"
+
+secret_names = [
+  "DATABASE_URL",
+  "API_KEY"
+]
+
+env_vars = {
+  NODE_ENV = "production"
+}
+
+allow_public_access = true
+
+service_account_email = null
+container_port         = 8080
+cpu_limit              = "1"
+memory_limit           = "512Mi"
+min_instance_count     = 0
+max_instance_count     = 10
+ingress                = "INGRESS_TRAFFIC_ALL"
+
+labels = {
+  environment = "dev"
+  managed_by  = "terraform"
+}
